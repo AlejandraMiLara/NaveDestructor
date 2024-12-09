@@ -9,6 +9,12 @@ Texture2D slowEnemyTexture;
 Texture2D diagonalEnemyTexture; 
 Texture2D zigzagEnemyTexture;
 
+float speedModifier = 1.0f;
+
+
+Music generalMusic;
+Music gameOverMusic;
+
 class StarParticle {
 public:
     float x, y;
@@ -21,7 +27,7 @@ public:
     void Update() {
         y += speedY;
         if (y > GetScreenHeight()) {
-            y = 0; // Reiniciar posición si la estrella sale de la pantalla
+            y = 0;
         }
     }
 
@@ -44,7 +50,7 @@ public:
     void Update() {
         x += speedX;
         y += speedY;
-        alpha -= 0.02f; // Disminuir la transparencia con el tiempo
+        alpha -= 0.02f;
         if (alpha < 0.0f) alpha = 0.0f;
     }
 
@@ -54,14 +60,12 @@ public:
         DrawCircle(static_cast<int>(x), static_cast<int>(y), 3, c);
     }
 
-    bool IsActive() const { // Declarar este método como const
+    bool IsActive() const {
         return alpha > 0.0f;
     }
 };
 
 
-
-// Clase base para todos los objetos del juego
 class GameObject {
 protected:
     float x, y;
@@ -84,7 +88,6 @@ public:
     virtual ~GameObject() {}
 };
 
-// Clase abstracta para los enemigos
 class Enemy : public GameObject {
 protected:
     float speed;
@@ -98,14 +101,13 @@ public:
     virtual ~Enemy() {}
 };
 
-// Enemigo que se mueve lentamente
 class SlowEnemy : public Enemy {
 public:
     SlowEnemy(float x, float y)
         : Enemy(x, y, 30, 30, 1.0f) {}
 
     void Update() override {
-        y += speed;
+        y += speed * speedModifier;
     }
 
     void Draw() override {
@@ -119,10 +121,10 @@ public:
         : Enemy(x, y, 30, 30, 1.0f) {}
 
     void Update() override {
-        y += speed;
-        x += speed / 2; // Movimiento en diagonal
+        y += speed * speedModifier + 2;
+        x += (speed / 2) * speedModifier + 2;
         if (x + width > GetScreenWidth() || x < 0) {
-            speed = -speed; // Cambiar dirección al chocar con los bordes
+            speed = -speed;
         }
     }
 
@@ -139,14 +141,14 @@ public:
         : Enemy(x, y, 30, 30, 1.0f), movingRight(true) {}
 
     void Update() override {
-        y += speed;
+        y += speed * speedModifier;
         if (movingRight) {
-            x += speed;
+            x += speed * speedModifier + 2;
             if (x + width > GetScreenWidth()) {
                 movingRight = false;
             }
         } else {
-            x -= speed;
+            x -= speed * speedModifier+2;
             if (x < 0) {
                 movingRight = true;
             }
@@ -159,7 +161,6 @@ public:
 };
 
 
-// Proyectil disparado por el jugador
 class Projectile : public GameObject {
 public:
     bool isColliding = false;
@@ -168,7 +169,7 @@ public:
         : GameObject(x, y, 5, 10) {}
 
     void Update() override {
-        y -= 5; // Movimiento hacia arriba
+        y -= 5;
     }
 
     void Draw() override {
@@ -178,12 +179,11 @@ public:
     bool IsOffScreen() { return y < 0; }
 };
 
-//Clase Player
 
 class Player : public GameObject {
 private:
     std::vector<std::unique_ptr<Projectile>>& projectiles;
-    std::vector<Particle> particles; // Partículas del jugador
+    std::vector<Particle> particles;
 
 public:
     Player(float x, float y, std::vector<std::unique_ptr<Projectile>>& projectiles)
@@ -200,10 +200,8 @@ public:
             projectiles.push_back(std::make_unique<Projectile>(x + width / 2 - 2.5, y));
         }
 
-        // Generar partículas
         particles.push_back(Particle(x + width / 2, y + height, GetRandomValue(-2, 2) / 10.0f, 1.0f, WHITE));
 
-        // Actualizar y eliminar partículas
         for (auto& particle : particles) {
             particle.Update();
         }
@@ -213,7 +211,6 @@ public:
     }
 
     void Draw() override {
-        // Dibujar la textura del jugador
         DrawTexture(playerTexture, static_cast<int>(x), static_cast<int>(y), WHITE);
         for (auto& particle : particles) {
             particle.Draw();
@@ -227,7 +224,6 @@ public:
 };
 
 
-// Función para reiniciar el juego
 void ResetGame(Player& player, std::vector<std::unique_ptr<GameObject>>& enemies,
                std::vector<std::unique_ptr<Projectile>>& projectiles, int& score, int& lives) {
     enemies.clear();
@@ -237,22 +233,25 @@ void ResetGame(Player& player, std::vector<std::unique_ptr<GameObject>>& enemies
     player.SetPosition(400, 500);
 }
 
-// Función principal
 int main() {
     InitWindow(800, 600, "Nave Destructor: Manejo de Colisiones");
+    InitAudioDevice();
     SetTargetFPS(60);
 
-// Cargar texturas 
-playerTexture = LoadTexture("src/nave.png"); 
-slowEnemyTexture = LoadTexture("src/pato1.png"); 
-diagonalEnemyTexture = LoadTexture("src/patito3.png"); 
-zigzagEnemyTexture = LoadTexture("src/patito2.png");
+    playerTexture = LoadTexture("src/nave.png");
+    slowEnemyTexture = LoadTexture("src/pato1.png");
+    diagonalEnemyTexture = LoadTexture("src/patito3.png");
+    zigzagEnemyTexture = LoadTexture("src/patito2.png");
+
+    generalMusic = LoadMusicStream("src/musica_general.mp3");
+    gameOverMusic = LoadMusicStream("src/musica_fin.mp3");
+
+    PlayMusicStream(generalMusic);
 
     std::vector<std::unique_ptr<GameObject>> enemies;
     std::vector<std::unique_ptr<Projectile>> projectiles;
-    std::vector<StarParticle> starParticles; // Partículas de estrellas
+    std::vector<StarParticle> starParticles;
 
-    // Generar partículas de estrellas iniciales
     for (int i = 0; i < 100; i++) {
         starParticles.emplace_back(GetRandomValue(0, GetScreenWidth()), GetRandomValue(0, GetScreenHeight()), GetRandomValue(1, 5) / 2.0f, WHITE);
     }
@@ -263,10 +262,14 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
     int lives = 5;
     bool isGameOver = false;
 
+    speedModifier = 1.0f + score / 100.0f;
+
     while (!WindowShouldClose()) {
+        UpdateMusicStream(generalMusic);
+        UpdateMusicStream(gameOverMusic);
+
         if (!isGameOver) {
-            // Generar enemigos aleatorios
-            int enemyType = GetRandomValue(0, 2); // Generar un tipo de enemigo aleatorio
+            int enemyType = GetRandomValue(0, 2);
             if (GetRandomValue(0, 100) < 2) {
                 float x = GetRandomValue(0, 770);
                 if (enemyType == 0) {
@@ -278,7 +281,6 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
                 }
             }
 
-            // Actualizar objetos
             player.Update();
             for (auto& projectile : projectiles) {
                 projectile->Update();
@@ -289,23 +291,25 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
                     enemy->CheckCollision(&player)) {
                     static_cast<Enemy*>(enemy.get())->isColliding = true;
                     lives--;
-                    if (lives <= 0) isGameOver = true;
+                    if (lives <= 0) {
+                        isGameOver = true;
+                        StopMusicStream(generalMusic);
+                        PlayMusicStream(gameOverMusic);
+                    }
                 }
             }
 
-            // Detectar colisiones entre proyectiles y enemigos
             for (auto& projectile : projectiles) {
                 for (auto& enemy : enemies) {
                     if (!projectile->isColliding && !static_cast<Enemy*>(enemy.get())->isColliding &&
                         projectile->CheckCollision(enemy.get())) {
                         projectile->isColliding = true;
                         static_cast<Enemy*>(enemy.get())->isColliding = true;
-                        score += 10; // Incrementa el puntaje al colisionar
+                        score += 10;
                     }
                 }
             }
 
-            // Eliminar enemigos marcados y proyectiles fuera de pantalla o colisionados
             enemies.erase(
                 std::remove_if(enemies.begin(), enemies.end(),
                                [](const std::unique_ptr<GameObject>& enemy) {
@@ -320,9 +324,17 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
                                }),
                 projectiles.end());
 
-            // Actualizar partículas de estrellas
+
             for (auto& star : starParticles) {
+
                 star.Update();
+            }
+        } else {
+            if (IsKeyPressed(KEY_ENTER)) {
+                ResetGame(player, enemies, projectiles, score, lives);
+                isGameOver = false;
+                StopMusicStream(gameOverMusic);
+                PlayMusicStream(generalMusic);
             }
         }
 
@@ -342,7 +354,6 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
             DrawText(TextFormat("Score: %d", score), 10, 10, 20, WHITE);
             DrawText(TextFormat("Lives: %d", lives), 10, 40, 20, WHITE);
 
-            // Dibujar partículas de estrellas
             for (auto& star : starParticles) {
                 star.Draw();
             }
@@ -361,11 +372,14 @@ zigzagEnemyTexture = LoadTexture("src/patito2.png");
 
     CloseWindow();
 
-
-    UnloadTexture(playerTexture); 
-    UnloadTexture(slowEnemyTexture); 
-    UnloadTexture(diagonalEnemyTexture); 
+    UnloadTexture(playerTexture);
+    UnloadTexture(slowEnemyTexture);
+    UnloadTexture(diagonalEnemyTexture);
     UnloadTexture(zigzagEnemyTexture);
+    UnloadMusicStream(generalMusic);
+    UnloadMusicStream(gameOverMusic);
+
+    CloseAudioDevice();
 
     return 0;
 }
